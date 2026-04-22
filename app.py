@@ -1,11 +1,14 @@
+﻿import os
 from flask import Flask, render_template, request
 from supabase import create_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
-url = "https://gtdzrydriuzeavedudph.supabase.co"
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZHpyeWRyaXV6ZWF2ZWR1ZHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NDk3NzEsImV4cCI6MjA5MjEyNTc3MX0.KhCCjejsx4nQLo-iY904t-q9GZmXTIQGziATQGrtX-4"
-# anon public
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
 
 supabase = create_client(url, key)
 
