@@ -29,14 +29,15 @@ def submit():
     user_id = "11111111-1111-1111-1111-111111111111"
 
     try:
-        supabase.table("assessments").insert({
+        result = supabase.table("assessments").insert({
             "user_id": user_id,
             "username": name,
             "activity_name": "测试活动"
         }).execute()
+        print("结果：", result)  # 加这行
     except Exception as e:
-        print(f"错误: {e}")
-        return f"提交失败: {str(e)}"
+        print(f"完整错误: {repr(e)}")  # repr() 显示更多细节
+        return f"提交失败: {repr(e)}"
 
     return "提交成功！"
 
