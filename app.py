@@ -7,7 +7,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-url = "https://gtdzrydriuzeavedudph.supabase.co/rest/v1/"
+url = "https://gtdzrydriuzeavedudph.supabase.co"
 key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZHpyeWRyaXV6ZWF2ZWR1ZHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NDk3NzEsImV4cCI6MjA5MjEyNTc3MX0.KhCCjejsx4nQLo-iY904t-q9GZmXTIQGziATQGrtX-4"
 
 supabase = create_client(url, key)
