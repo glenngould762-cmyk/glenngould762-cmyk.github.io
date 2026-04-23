@@ -3546,7 +3546,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 }
 
                 window.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveData(); } });
-                window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = '有未保存更改'; } });
+                window.addEventListener('beforeunload', e => { });
                 document.addEventListener('click', () => {
                     document.querySelectorAll('.cat-dropdown').forEach(d => d.style.display = 'none');
                     document.querySelectorAll('.cat-wrap').forEach(w => w.classList.remove('open'));
