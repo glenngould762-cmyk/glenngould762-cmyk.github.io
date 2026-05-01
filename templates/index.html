@@ -3002,26 +3002,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 // ─── IMAGE ──────────────────────────────────────────────
                 function trigImg(id) { document.getElementById('fi-' + id).click(); }
 
+                
                 async function handleImg(id, inp) {
-                    const f = inp.files[0]; if (!f) return;
-                    if (f.size > 10 * 1024 * 1024) { toast('图片不能超过10MB'); return; }
-                    const r = new FileReader();
-                    r.onload = e => {
-                        const i = items.find(x => x.id === id);
-                        if (i) {
-                            const original = e.target.result;
-                            const originalSize = Math.round(original.length / 1024);
-
-                            i.img = original;
-                            i.imgName = f.name;
-                            renderAll();
-                            mkDirty();
-
-                            toast(`✓ 图片已上传：${originalSize}KB`);
-                        }
-                    };
-                    r.readAsDataURL(f);
-                }
+    const f = inp.files[0]; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { toast('图片不能超过10MB'); return; }
+    
+    const i = items.find(x => x.id === id);
+    if (!i) return;
+    
+    toast('⏳ 正在上传图片...');
+    
+    try {
+        const SUPABASE_URL = 'https://gtdzrydriuzeavedudph.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZHpyeWRyaXV6ZWF2ZWR1ZHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NDk3NzEsImV4cCI6MjA5MjEyNTc3MX0.KhCCjejsx4nQLo-iY904t-q9GZmXTIQGziATQGrtX-4';
+        
+        const ext = f.name.split('.').pop();
+        const fileName = `${curUser}_${id}_${Date.now()}.${ext}`;
+        
+        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${fileName}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': f.type,
+            },
+            body: f
+        });
+        
+        if (!res.ok) throw new Error('上传失败');
+        
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+        
+        i.img = publicUrl;
+        i.imgName = f.name;
+        renderAll();
+        mkDirty();
+        toast(`✓ 图片已上传`);
+        
+    } catch (e) {
+        toast('❌ 图片上传失败：' + e.message);
+    }
+}
                 function clrImg(id) { const i = items.find(x => x.id === id); if (i) { i.img = ''; i.imgName = ''; i.showOcr = false; renderAll(); mkDirty(); } }
 
                 // ─── OCR ────────────────────────────────────────────────
