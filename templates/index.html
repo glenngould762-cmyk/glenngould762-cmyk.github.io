@@ -2353,6 +2353,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <script>
                 // ─── STATE ──────────────────────────────────────────────
                 let curUser = null, items = [], dirty = false, saveTimer = null;
+                let cloudUserId = null;
                 const MAX = 150;
                 let ocrMode = 'local';
                 let categories = []; // 用户自定义分类列表
@@ -2451,6 +2452,47 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 // 兼容旧版 LocalStorage
                 const sk = u => 'zc_' + u;
 
+                async function saveLocalCache(u, itemsArr, catsArr) {
+                    const cats = catsArr || [];
+                    try {
+                        if (db) await saveToDB(u, itemsArr);
+                    } catch (e) {
+                        console.log('写入 IndexedDB 缓存失败:', e.message);
+                    }
+                    try {
+                        localStorage.setItem(sk(u), JSON.stringify(itemsArr));
+                    } catch (e) {
+                        console.log('写入 localStorage 缓存失败:', e.message);
+                    }
+                    try {
+                        localStorage.setItem('zc_cats_' + u, JSON.stringify(cats));
+                    } catch (e) { /* ignore */ }
+                }
+
+                async function syncCloudOrFail(u, d) {
+                    try {
+                        const r = await fetch('/api/profile', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username: u,
+                                items: d,
+                                categories: categories
+                            })
+                        });
+                        const j = await r.json().catch(() => ({}));
+                        if (!r.ok) {
+                            console.warn('云端保存失败:', j.error || r.status);
+                            return false;
+                        }
+                        if (j.user_id) cloudUserId = j.user_id;
+                        return true;
+                    } catch (e) {
+                        console.warn('云端保存异常:', e);
+                        return false;
+                    }
+                }
+
                 async function allU() {
                     try {
                         if (db) {
@@ -2473,33 +2515,57 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     console.log('=== 加载数据 ===');
                     console.log('用户名:', u);
 
-                    // 先尝试从 IndexedDB 加载
+                    try {
+                        const r = await fetch('/api/profile?username=' + encodeURIComponent(u));
+                        if (r.ok) {
+                            const j = await r.json();
+                            if (j.found) {
+                                const itemsArr = Array.isArray(j.items) ? j.items : [];
+                                const catsArr = Array.isArray(j.categories) ? j.categories : [];
+                                console.log('✓ 从云端加载，条数:', itemsArr.length);
+                                await saveLocalCache(u, itemsArr, catsArr);
+                                return {
+                                    items: itemsArr,
+                                    categories: catsArr,
+                                    user_id: j.user_id || null
+                                };
+                            }
+                        } else {
+                            console.warn('云端加载 HTTP', r.status);
+                        }
+                    } catch (e) {
+                        console.warn('云端加载失败，使用本机缓存:', e.message);
+                    }
+
                     try {
                         if (db) {
                             const data = await loadFromDB(u);
                             console.log('✓ 从 IndexedDB 加载成功，数据条数:', data.length);
-                            return data;
+                            let cats = [];
+                            try { cats = JSON.parse(localStorage.getItem('zc_cats_' + u) || '[]'); } catch (e2) { cats = []; }
+                            return { items: data, categories: cats, user_id: null };
                         }
                     } catch (e) {
                         console.log('IndexedDB 加载失败，回退到 LocalStorage:', e.message);
                     }
 
-                    // 回退到 LocalStorage
                     console.log('存储键:', sk(u));
                     try {
                         const s = localStorage.getItem(sk(u));
                         console.log('从localStorage读取到的数据长度:', s ? s.length : 0);
+                        let parsed = [];
                         if (s) {
-                            const parsed = JSON.parse(s);
+                            parsed = JSON.parse(s);
                             console.log('解析后的数据条数:', parsed.length);
-                            return parsed;
                         } else {
                             console.log('localStorage中没有找到数据');
-                            return [];
                         }
+                        let cats = [];
+                        try { cats = JSON.parse(localStorage.getItem('zc_cats_' + u) || '[]'); } catch (e2) { cats = []; }
+                        return { items: parsed, categories: cats, user_id: null };
                     } catch (e) {
                         console.error('加载数据失败:', e);
-                        return [];
+                        return { items: [], categories: [], user_id: null };
                     }
                 }
 
@@ -2536,7 +2602,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                             await saveToDB(u, d);
                             console.log('✓ 数据已成功写入 IndexedDB');
                             toast('✓ 数据已保存（使用 IndexedDB，无大小限制）');
-                            return { success: true, hasImages: true, storage: 'IndexedDB' };
+                            const cloudOk = await syncCloudOrFail(u, d);
+                            return { success: true, hasImages: true, storage: 'IndexedDB', cloudOk };
                         }
                     } catch (e) {
                         console.error('❌ IndexedDB 保存失败:', e);
@@ -2565,7 +2632,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
                         const newStorageInfo = getStorageInfo();
                         toast(`✓ 数据已保存（存储使用：${newStorageInfo.usedMB}MB/${newStorageInfo.usedPercent}%）`);
-                        return { success: true, hasImages: true };
+                        const cloudOk = await syncCloudOrFail(u, d);
+                        return { success: true, hasImages: true, cloudOk };
                     } catch (e) {
                         console.error('❌ 完整数据保存失败:', e);
                         console.error('错误详情:', e.message);
@@ -2606,7 +2674,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                         } else {
                             toast(`✓ 数据已保存（部分图片被压缩）`);
                         }
-                        return { success: true, hasImages: lostImages === 0 };
+                        const cloudOk = await syncCloudOrFail(u, compressedData);
+                        return { success: true, hasImages: lostImages === 0, cloudOk };
                     } catch (e2) {
                         console.error('❌ 压缩后数据仍保存失败:', e2);
                     }
@@ -2638,7 +2707,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                         localStorage.setItem(sk(u), textOnlyStr);
                         console.log('✓ 文字数据保存成功');
                         toast(`⚠️ 仅保存了文字数据（${d.length}条），所有图片因空间限制未保存，请立即导出Excel！`, 10000);
-                        return { success: true, hasImages: false };
+                        const cloudOk = await syncCloudOrFail(u, textOnlyData);
+                        return { success: true, hasImages: false, cloudOk };
                     } catch (e3) {
                         console.error('❌ 连文字数据都保存失败:', e3);
                         throw new Error(`存储空间严重不足（已使用${storageInfo.usedPercent}%），请清理浏览器缓存后重试`);
@@ -2670,9 +2740,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     const n = document.getElementById('ni').value.trim();
                     if (!n) { toast('请输入姓名！'); return; }
                     curUser = n;
-                    items = await loadU(n);
-                    // 加载分类列表
-                    try { categories = JSON.parse(localStorage.getItem('zc_cats_' + n) || '[]'); } catch (e) { categories = []; }
+                    const loaded = await loadU(n);
+                    items = loaded.items;
+                    categories = loaded.categories;
+                    cloudUserId = loaded.user_id || null;
                     document.getElementById('cu').textContent = n;
                     document.getElementById('ls').style.display = 'none';
                     const appEl = document.getElementById('as');
@@ -2683,7 +2754,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 }
                 function logout() {
                     if (dirty && !confirm('有未保存的更改，确定切换？')) return;
-                    curUser = null; items = []; dirty = false; categories = [];
+                    curUser = null; items = []; dirty = false; categories = []; cloudUserId = null;
                     document.getElementById('as').style.display = 'none';
                     document.getElementById('as').classList.remove('entering');
                     document.body.classList.remove('in-app');
@@ -3002,46 +3073,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 // ─── IMAGE ──────────────────────────────────────────────
                 function trigImg(id) { document.getElementById('fi-' + id).click(); }
 
-                
+
                 async function handleImg(id, inp) {
-    const f = inp.files[0]; if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { toast('图片不能超过10MB'); return; }
-    
-    const i = items.find(x => x.id === id);
-    if (!i) return;
-    
-    toast('⏳ 正在上传图片...');
-    
-    try {
-        const SUPABASE_URL = 'https://gtdzrydriuzeavedudph.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZHpyeWRyaXV6ZWF2ZWR1ZHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NDk3NzEsImV4cCI6MjA5MjEyNTc3MX0.KhCCjejsx4nQLo-iY904t-q9GZmXTIQGziATQGrtX-4';
-        
-        const ext = f.name.split('.').pop();
-        const fileName = `${curUser}_${id}_${Date.now()}.${ext}`;
-        
-        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${fileName}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': f.type,
-            },
-            body: f
-        });
-        
-        if (!res.ok) throw new Error('上传失败');
-        
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
-        
-        i.img = publicUrl;
-        i.imgName = f.name;
-        renderAll();
-        mkDirty();
-        toast(`✓ 图片已上传`);
-        
-    } catch (e) {
-        toast('❌ 图片上传失败：' + e.message);
-    }
-}
+                    const f = inp.files[0]; if (!f) return;
+                    if (f.size > 10 * 1024 * 1024) { toast('图片不能超过10MB'); return; }
+
+                    const i = items.find(x => x.id === id);
+                    if (!i) return;
+
+                    toast('⏳ 正在上传图片...');
+
+                    try {
+                        const SUPABASE_URL = 'https://gtdzrydriuzeavedudph.supabase.co';
+                        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZHpyeWRyaXV6ZWF2ZWR1ZHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NDk3NzEsImV4cCI6MjA5MjEyNTc3MX0.KhCCjejsx4nQLo-iY904t-q9GZmXTIQGziATQGrtX-4';
+
+                        const ext = f.name.split('.').pop();
+                        const fileName = `${curUser}_${id}_${Date.now()}.${ext}`;
+
+                        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${fileName}`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                                'Content-Type': f.type,
+                            },
+                            body: f
+                        });
+
+                        if (!res.ok) throw new Error('上传失败');
+
+                        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+
+                        i.img = publicUrl;
+                        i.imgName = f.name;
+                        renderAll();
+                        mkDirty();
+                        toast(`✓ 图片已上传`);
+
+                    } catch (e) {
+                        toast('❌ 图片上传失败：' + e.message);
+                    }
+                }
                 function clrImg(id) { const i = items.find(x => x.id === id); if (i) { i.img = ''; i.imgName = ''; i.showOcr = false; renderAll(); mkDirty(); } }
 
                 // ─── OCR ────────────────────────────────────────────────
@@ -3183,19 +3254,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     document.getElementById('ss').textContent = '有未保存的更改';
                     clearTimeout(saveTimer); saveTimer = setTimeout(() => { if (dirty) saveData(true); }, 5000);
                 }
-                function saveData(silent = false) {
+                async function saveData(silent = false) {
                     if (!curUser) return;
                     try {
-                        const result = saveU(curUser, items);
+                        const result = await saveU(curUser, items);
                         dirty = false;
                         document.getElementById('sd').className = 'dt sv';
                         document.getElementById('ss').textContent = '已保存 · ' + new Date().toLocaleTimeString('zh-CN');
                         updateStorageInfo();
                         if (!silent && result.success) {
-                            if (result.hasImages) {
-                                toast('✓ 数据已保存（含图片）');
-                            } else {
-                                toast('⚠️ 数据已保存，但图片未保存，请导出Excel备份！', 8000);
+                            if (result.cloudOk === false) {
+                                toast('⚠️ 已保存在本机，但云端未同步（请检查网络或服务端配置）', 7000);
+                            } else if (result.storage !== 'IndexedDB') {
+                                if (result.hasImages) {
+                                    toast('✓ 数据已保存（含图片）');
+                                } else {
+                                    toast('⚠️ 数据已保存，但图片未保存，请导出Excel备份！', 8000);
+                                }
                             }
                         }
                     } catch (e) {
