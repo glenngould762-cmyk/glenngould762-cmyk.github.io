@@ -3088,7 +3088,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0ZHpyeWRyaXV6ZWF2ZWR1ZHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NDk3NzEsImV4cCI6MjA5MjEyNTc3MX0.KhCCjejsx4nQLo-iY904t-q9GZmXTIQGziATQGrtX-4';
 
                         const ext = f.name.split('.').pop();
-                        const fileName = `${curUser}_${id}_${Date.now()}.${ext}`;
+                        const safeUser = String(curUser).replace(/[^\w\-]/g, '');
+                        const fileName = `${safeUser || 'user'}_${id}_${Date.now()}.${ext}`;
 
                         const res = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${fileName}`, {
                             method: 'POST',
