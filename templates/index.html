@@ -3315,7 +3315,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     const fname = `24语21班${san(curUser)}${san(it.name) || '未命名'}${award || ''}.${ext}`;
                     folder.file(fname, blob);
 }
-                        });
                         const blob = await zip.generateAsync({ type: 'blob' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
