@@ -3379,7 +3379,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                                     continue;
                                 }
                                 const fname = `image${i + 1}`;
-                                imgs.push({ rid: 'rId' + (imgs.length + 1), ext, data: b64, idx: i, fname });
+                                imgE.push({ rid: 'rId' + (imgE.length + 1), ext, data: b64, idx: i, fname });
                                 // 嵌入代人的媒体 payload,并使用 () base64: true) 标志
                                 zip.file(`xl/media/${fname}.${ext}`, b64, { base64: true, binary: true });
                             } catch (err) {
