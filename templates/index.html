@@ -3292,18 +3292,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     try {
                         const zip = new JSZip();
                         const folder = zip.folder(curUser + '_综测图片');
-                        withImg.forEach((it, i) => {
-                            const b64 = it.img.split(',')[1];
-                            const mime = it.img.match(/data:([^;]+);/);
-                            const ext = (mime && mime[1] === 'image/png') ? 'png' : 'jpg';
-                            // Filename: 24语21班姓名活动名称奖项（无连接符）
-                            const san = s => String(s || '').replace(/[\\/:*?"<>|+_]/g, '').trim();
-                            const award = san(it.award);
-                            const fname = `24语21班${san(curUser)}${san(it.name) || '未命名'}${award || ''}.${ext}`;
-                            const bin = atob(b64);
-                            const buf = new Uint8Array(bin.length);
-                            for (let j = 0; j < bin.length; j++)buf[j] = bin.charCodeAt(j);
-                            folder.file(fname, buf);
+                        for (const it of withImg) {
+                    let blob;
+                    if (it.img.startsWith('data:')) {
+                        // 旧数据:base64 → blob
+                        const b64 = it.img.split(',')[1];
+                        const mime = it.img.match(/data:([^;]+);/);
+                        const bin = atob(b64);
+                        const buf = new Uint8Array(bin.length);
+                        for (let j = 0; j < bin.length; j++) buf[j] = bin.charCodeAt(j);
+                        blob = new Blob([buf], { type: mime ? mime[1] : 'image/png' });
+                    } else {
+                        // 新数据:URL → 直接 fetch 成 blob
+                        const res = await fetch(it.img);
+                        blob = await res.blob();
+                    }
+                    // Filename: 24语21班姓名活动名称奖项(无连接符)
+                    const san = s => String(s || '').replace(/[\\/:*?"<>|+_]/g, '').trim();
+                    const award = san(it.award);
+                    const mime2 = (blob.type || '').toLowerCase();
+                    const ext = mime2.includes('png') ? 'png' : 'jpg';
+                    const fname = `24语21班${san(curUser)}${san(it.name) || '未命名'}${award || ''}.${ext}`;
+                    folder.file(fname, blob);
+}
                         });
                         const blob = await zip.generateAsync({ type: 'blob' });
                         const url = URL.createObjectURL(blob);
@@ -3344,23 +3355,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     for (let i = 0; i < items.length; i++) {
                         const it = items[i];
                         if (it.img) {
-                            const mime = it.img.match(/data:([^;]+);/);
-                            const ext = (mime && mime[1] === 'image/png') ? 'png' : 'jpg';
-                            // 重要：必须去掉 data:image/...;base64, 这个前缀
-                            let b64 = it.img.split(',')[1];
-                            // 去掉换行和空格
-                            b64 = b64.replace(/\s+/g, '');
-
-                            // 检查 base64 是否为空或损坏
-                            if (!b64 || b64.length < 10) {
-                                console.warn(`Image ${i} is empty or corrupted, skipping`);
-                                continue;
+                            try {
+                                let dataUrl = it.img;
+                                // 新数据:URL → 先下载并转成 base64 dataURL
+                                if (!it.img.startsWith('data:')) {
+                                    const res = await fetch(it.img);
+                                    const blob = await res.blob();
+                                    dataUrl = await new Promise((resolve, reject) => {
+                                        const fr = new FileReader();
+                                        fr.onload = () => resolve(fr.result);
+                                        fr.onerror = reject;
+                                        fr.readAsDataURL(blob);
+                                    });
+                                }
+                                const mime = dataUrl.match(/data:([^;]+);/);
+                                const ext = (mime && mime[1] === 'image/png') ? 'png' : 'jpg';
+                                // 但装入:必须先拆解 data:image/...;base64, 这部分前缀
+                                let b64 = dataUrl.split(',')[1];
+                                b64 = b64.replace(/\s/g, '');
+                                // 检查base64是否为空
+                                if (!b64 || b64.length < 10) {
+                                    console.warn(`Image ${i} is empty or corrupted, skipping`);
+                                    continue;
+                                }
+                                const fname = `image${i + 1}`;
+                                imgs.push({ rid: 'rId' + (imgs.length + 1), ext, data: b64, idx: i, fname });
+                                // 嵌入代人的媒体 payload,并使用 () base64: true) 标志
+                                zip.file(`xl/media/${fname}.${ext}`, b64, { base64: true, binary: true });
+                            } catch (err) {
+                                console.warn(`Image ${i} 下载失败,跳过:`, err);
                             }
-
-                            const fname = `image${i + 1}`;
-                            imgE.push({ rid: 'rId' + (imgE.length + 1), ext, data: b64, idx: i, fname });
-                            // 确保传入的是纯 base64 字符串，并使用 { base64: true } 标志
-                            zip.file(`xl/media/${fname}.${ext}`, b64, { base64: true, binary: true });
                         }
                     }
 
