@@ -3473,7 +3473,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     // G=颁奖单位, H=指导教师, I=加分, J=佐证材料
                     const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
                     const COL_W = [10, 10, 40, 12, 30, 12, 28, 18, 10, 28];
-                    const ROW_H = 110;
+                    const ROW_H = 200;
 
                     function cell(col, row, val, style) {
                         const escaped = xe(String(val));
@@ -3489,7 +3489,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
                     let rowsXml = '';
                     // Row 1: headers
-                    rowsXml += `<row r="1" ht="24" customHeight="1">`;
+                    rowsXml += `<row r="1" ht="30" customHeight="1">`;
                     const headers = ['年份', '月份', '项目', '姓名', '奖项', '级别', '颁奖单位', '指导教师', '加分', '佐证材料'];
                     headers.forEach((h, i) => { rowsXml += cell(COLS[i], 1, h, 1); });
                     rowsXml += `</row>`;
@@ -3497,7 +3497,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     // Data rows start immediately below the header to match the required ten-column template.
                     items.forEach((it, idx) => {
                         const r = idx + 2;
-                        const ht = it.img ? ROW_H : 20;
+                        const ht = it.img ? ROW_H : 30;
                         const [year, month] = exportDateParts(it.date);
                         rowsXml += `<row r="${r}" ht="${ht}" customHeight="1">`;
                         rowsXml += cell('A', r, year, 5);
