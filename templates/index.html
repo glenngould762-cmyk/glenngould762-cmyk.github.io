@@ -2688,8 +2688,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                         id: item.id,
                         name: item.name,
                         award: item.award,
+                        awardUnit: item.awardUnit,
+                        instructor: item.instructor,
                         date: item.date,
                         score: item.score,
+                        category: item.category,
                         img: '',
                         imgName: item.img ? '(图片未保存)' : '',
                         ocrRaw: '',
@@ -2894,7 +2897,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 // ─── ITEMS ──────────────────────────────────────────────
                 function addItem() {
                     if (items.length >= MAX) { toast('已达到150项上限'); return; }
-                    items.push({ id: Date.now(), name: '', award: '', awardUnit: '', date: '', score: '', img: '', imgName: '', ocrRaw: '', ocrName: '', ocrAward: '', ocrAwardUnit: '', ocrDate: '', ocrScore: '', showOcr: false, category: '' });
+                    items.push({ id: Date.now(), name: '', award: '', awardUnit: '', instructor: '', date: '', score: '', img: '', imgName: '', ocrRaw: '', ocrName: '', ocrAward: '', ocrAwardUnit: '', ocrDate: '', ocrScore: '', showOcr: false, category: '' });
                     renderAll(); mkDirty();
                     setTimeout(() => { const l = document.getElementById('ml'); if (l.lastChild) l.lastChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 80);
                 }
@@ -2917,11 +2920,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 function selectCategory(id, val) {
                     upd(id, 'category', val);
                     const valEl = document.getElementById('cat-val-' + id);
-                    if (valEl) valEl.textContent = val || '— 无分类 —';
+                    if (valEl) valEl.textContent = val || '— 无级别 —';
                     // update selected state in dropdown
                     const dd = document.getElementById('cat-dd-' + id);
                     if (dd) dd.querySelectorAll('.cat-opt').forEach(o => {
-                        o.classList.toggle('selected', o.textContent.trim() === (val || '— 无分类 —'));
+                        o.classList.toggle('selected', o.textContent.trim() === (val || '— 无级别 —'));
                     });
                     closeCatDropdown(id);
                 }
@@ -2945,7 +2948,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 function confirmAddCategory() {
                     const modal = document.getElementById('cat-modal');
                     const name = document.getElementById('cat-input').value.trim();
-                    if (!name) { toast('请输入分类名称'); return; }
+                    if (!name) { toast('请输入级别名称'); return; }
                     if (!categories.includes(name)) {
                         categories.push(name);
                         if (curUser) localStorage.setItem('zc_cats_' + curUser, JSON.stringify(categories));
@@ -2958,7 +2961,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     modal.style.display = 'none';
                     renderAll();
                     mkDirty();
-                    toast('✓ 分类「' + name + '」已添加');
+                    toast('✓ 级别「' + name + '」已添加');
                 }
                 function cancelAddCategory() {
                     document.getElementById('cat-modal').style.display = 'none';
@@ -2981,16 +2984,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="mn">NO.${String(idx + 1).padStart(3, '0')}</div>
       <div class="ig">
         <div class="fw" style="grid-column:1/-1">
-          <label class="flab">分类</label>
+          <label class="flab">级别</label>
           <div class="cat-wrap" id="cat-wrap-${it.id}">
             <div class="cat-display" onclick="toggleCatDropdown(${it.id}, event)">
-              <span class="cat-val" id="cat-val-${it.id}">${it.category ? esc(it.category) : '— 无分类 —'}</span>
+              <span class="cat-val" id="cat-val-${it.id}">${it.category ? esc(it.category) : '— 无级别 —'}</span>
               <span class="cat-arrow">▾</span>
             </div>
             <div class="cat-dropdown" id="cat-dd-${it.id}" style="display:none;">
-              <div class="cat-opt ${!it.category ? 'selected' : ''}" onclick="selectCategory(${it.id}, '')">— 无分类 —</div>
+              <div class="cat-opt ${!it.category ? 'selected' : ''}" onclick="selectCategory(${it.id}, '')">— 无级别 —</div>
               ${categories.map(c => `<div class="cat-opt ${it.category === c ? 'selected' : ''}" onclick="selectCategory(${it.id}, '${esc(c)}')">${esc(c)}</div>`).join('')}
-              <div class="cat-opt cat-add-opt" onclick="promptAddCategory(${it.id})">＋ 添加分类</div>
+              <div class="cat-opt cat-add-opt" onclick="promptAddCategory(${it.id})">＋ 添加级别</div>
             </div>
           </div>
         </div>
@@ -3003,6 +3006,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <label class="flab">奖项名称</label>
           <input type="text" class="fi2" placeholder="例：一等奖" maxlength="60"
             value="${esc(it.award)}" oninput="upd(${it.id},'award',this.value)"/>
+        </div>
+        <div class="fw" style="grid-column:3;grid-row:1">
+          <label class="flab">指导教师</label>
+          <input type="text" class="fi2" placeholder="例：张老师" maxlength="40"
+            value="${esc(it.instructor || '')}" oninput="upd(${it.id},'instructor',this.value)"/>
         </div>
         <div class="fw" style="grid-column:1;grid-row:2">
           <label class="flab">颁奖单位</label>
@@ -3345,10 +3353,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 async function buildXlsx() {
                     const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
                     const zip = new JSZip();
-                    const totalScore = items.reduce((s, i) => s + (parseFloat(i.score) || 0), 0);
-                    const now = new Date();
-                    const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
-
                     // ── Collect images ──────────────────────────────────────
                     const imgE = [];
                     for (let i = 0; i < items.length; i++) {
@@ -3427,7 +3431,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </Relationships>`;
 
                     // ── xl/styles.xml ───────────────────────────────────────
-                    // s=0: default, s=1: header (dark bg white bold center), s=2: data (light bg wrap), s=3: total (accent), s=4: info (italic gray)
+                    // s=0: default, s=1: header, s=2: data, s=3-4: legacy, s=5: text data
                     const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="5">
@@ -3447,28 +3451,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <borders count="2">
     <border><left/><right/><top/><bottom/></border>
     <border>
-      <left style="thin"><color rgb="FFC8B89A"/></left>
-      <right style="thin"><color rgb="FFC8B89A"/></right>
-      <top style="thin"><color rgb="FFC8B89A"/></top>
-      <bottom style="thin"><color rgb="FFC8B89A"/></bottom>
+      <left style="thin"><color rgb="FF000000"/></left>
+      <right style="thin"><color rgb="FF000000"/></right>
+      <top style="thin"><color rgb="FF000000"/></top>
+      <bottom style="thin"><color rgb="FF000000"/></bottom>
     </border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
   <cellXfs count="6">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"><alignment vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
     <xf numFmtId="0" fontId="4" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="left" vertical="center"/></xf>
-    <xf numFmtId="49" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"><alignment vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="49" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
   </cellXfs>
 </styleSheet>`;
 
                     // ── Build sheet rows ────────────────────────────────────
-                    // Columns: A=序号, B=活动名称, C=奖项名称, D=颁奖单位, E=获奖日期, F=分数, G=佐证材料, H=分类
-                    const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-                    const COL_W = [6, 30, 22, 26, 14, 10, 26, 16];
-                    const ROW_H = 90;
+                    // Columns: A=年份, B=月份, C=项目, D=姓名, E=奖项, F=级别,
+                    // G=颁奖单位, H=指导教师, I=加分, J=佐证材料
+                    const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+                    const COL_W = [10, 10, 40, 12, 30, 12, 28, 18, 10, 28];
+                    const ROW_H = 110;
 
                     function cell(col, row, val, style) {
                         const escaped = xe(String(val));
@@ -3477,56 +3482,41 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     function numCell(col, row, val, style) {
                         return `<c r="${col}${row}" t="n" s="${style}"><v>${val}</v></c>`;
                     }
+                    function exportDateParts(value) {
+                        const match = String(value || '').match(/(\d{4})[-\/.年](\d{1,2})/);
+                        return match ? [match[1], match[2]] : ['—', '—'];
+                    }
 
                     let rowsXml = '';
                     // Row 1: headers
                     rowsXml += `<row r="1" ht="24" customHeight="1">`;
-                    const headers = ['序号', '活动名称', '奖项名称', '颁奖单位', '获奖日期', '分数', '佐证材料（图片凭证）', '分类'];
+                    const headers = ['年份', '月份', '项目', '姓名', '奖项', '级别', '颁奖单位', '指导教师', '加分', '佐证材料'];
                     headers.forEach((h, i) => { rowsXml += cell(COLS[i], 1, h, 1); });
                     rowsXml += `</row>`;
 
-                    // Row 2: info (author) - note: use & not &amp; here, xe() will escape it
-                    const authorText = '姓名：' + curUser + '   共' + items.length + '项   导出日期：' + dateStr + '   By Claude Sonnet 4.6 & Peregrina Sue';
-                    rowsXml += `<row r="2" ht="18" customHeight="1">`;
-                    rowsXml += cell('A', 2, authorText, 4);
-                    rowsXml += `</row>`;
-
-                    // Data rows starting at row 3
+                    // Data rows start immediately below the header to match the required ten-column template.
                     items.forEach((it, idx) => {
-                        const r = idx + 3;
+                        const r = idx + 2;
                         const ht = it.img ? ROW_H : 20;
+                        const [year, month] = exportDateParts(it.date);
                         rowsXml += `<row r="${r}" ht="${ht}" customHeight="1">`;
-                        rowsXml += numCell('A', r, idx + 1, 2);
-                        rowsXml += cell('B', r, it.name || '（未填写）', 2);
-                        rowsXml += cell('C', r, it.award || '—', 2);
-                        rowsXml += cell('D', r, it.awardUnit || '—', 2);
-                        rowsXml += cell('E', r, it.date ? fmtDate(it.date) : '—', 5);
-                        rowsXml += cell('F', r, it.score !== '' ? String(it.score) : '—', 2);
-                        rowsXml += cell('G', r, it.img ? '' : '（无图片）', 2);
-                        rowsXml += cell('H', r, it.category || '—', 2);
+                        rowsXml += cell('A', r, year, 5);
+                        rowsXml += cell('B', r, month, 5);
+                        rowsXml += cell('C', r, it.name || '—', 2);
+                        rowsXml += cell('D', r, curUser || '—', 2);
+                        rowsXml += cell('E', r, it.award || '—', 2);
+                        rowsXml += cell('F', r, it.category || '—', 2);
+                        rowsXml += cell('G', r, it.awardUnit || '—', 2);
+                        rowsXml += cell('H', r, it.instructor || '—', 2);
+                        rowsXml += cell('I', r, it.score !== '' ? String(it.score) : '—', 2);
+                        rowsXml += cell('J', r, it.img ? '' : '（无图片）', 2);
                         rowsXml += `</row>`;
                     });
-
-                    // Total row
-                    const tr = items.length + 3;
-                    rowsXml += `<row r="${tr}" ht="22" customHeight="1">`;
-                    rowsXml += cell('A', tr, '', 3);
-                    rowsXml += cell('B', tr, '合计', 3);
-                    rowsXml += cell('C', tr, '', 3);
-                    rowsXml += cell('D', tr, '', 3);
-                    rowsXml += cell('E', tr, '', 3);
-                    rowsXml += cell('F', tr, totalScore.toFixed(1), 3);
-                    rowsXml += cell('G', tr, '', 3);
-                    rowsXml += cell('H', tr, '', 3);
-                    rowsXml += `</row>`;
 
                     // ── Column defs ─────────────────────────────────────────
                     let colsXml = '<cols>';
                     COL_W.forEach((w, i) => { colsXml += `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`; });
                     colsXml += '</cols>';
-
-                    // ── Merge A2:H2 for author row ──────────────────────────
-                    const mergeXml = `<mergeCells count="1"><mergeCell ref="A2:H2"/></mergeCells>`;
 
                     // ── xl/worksheets/sheet1.xml ────────────────────────────
                     const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -3535,7 +3525,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <sheetViews><sheetView workbookViewId="0"><selection activeCell="A1" sqref="A1"/></sheetView></sheetViews>
   ${colsXml}
   <sheetData>${rowsXml}</sheetData>
-  ${mergeXml}
   ${imgE.length ? '<drawing r:id="rId1"/>' : ''}
 </worksheet>`;
 
@@ -3545,8 +3534,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
 </Relationships>`;
 
-                    // ── Drawing XML – twoCellAnchor so images fit exactly inside column F cells ──
-                    // col 5 = F (0-based).  row0 = idx+2 (0-based, data starts at sheet row 3).
+                    // ── Drawing XML – twoCellAnchor so images fit exactly inside column J cells ──
+                    // col 9 = J (0-based). row0 = idx+1 (0-based, data starts at sheet row 2).
                     // Small inset (76200 EMU = 6pt) on all sides for padding.
                     const INSET = 76200;
 
@@ -3554,8 +3543,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <wsDr xmlns="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">`;
 
                     imgE.forEach((ie, n) => {
-                        const col0 = 5;          // F column (0-based)
-                        const row0 = ie.idx + 2; // 0-based row (sheet row 3 → idx+2)
+                        const col0 = 9;          // J column (0-based)
+                        const row0 = ie.idx + 1; // 0-based row (sheet row 2 → idx+1)
                         drawXml += `
   <twoCellAnchor editAs="clip">
     <from><col>${col0}</col><colOff>${INSET}</colOff><row>${row0}</row><rowOff>${INSET}</rowOff></from>
@@ -3958,15 +3947,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <button id="modalFinalBtn" onclick="hideWarningModal()" class="modal-final-btn">我知道了</button>
         </div>
     </div>
-    <!-- 添加分类模态框 -->
+    <!-- 添加级别模态框 -->
     <div id="cat-modal"
         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;backdrop-filter:blur(4px);"
         onclick="if(event.target===this)cancelAddCategory()">
         <div
             style="background:white;border-radius:18px;padding:2rem 2.2rem;min-width:320px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
-            <div style="font-size:1.1rem;font-weight:700;margin-bottom:1.2rem;color:#1a1a2e;">新增分类</div>
-            <label style="font-size:.82rem;color:#666;font-weight:500;display:block;margin-bottom:.4rem;">分类名称</label>
-            <input id="cat-input" type="text" maxlength="30" placeholder="例：学术科研 / 社会实践 / 文体活动"
+            <div style="font-size:1.1rem;font-weight:700;margin-bottom:1.2rem;color:#1a1a2e;">新增级别</div>
+            <label style="font-size:.82rem;color:#666;font-weight:500;display:block;margin-bottom:.4rem;">级别名称</label>
+            <input id="cat-input" type="text" maxlength="30" placeholder="例：院级 / 市级 / 校级"
                 style="width:100%;box-sizing:border-box;padding:.65rem 1rem;border:1.5px solid #e0e0e0;border-radius:10px;font-size:.95rem;outline:none;transition:border-color .2s;"
                 onfocus="this.style.borderColor='#0071e3'" onblur="this.style.borderColor='#e0e0e0'"
                 onkeydown="if(event.key==='Enter')confirmAddCategory();if(event.key==='Escape')cancelAddCategory()" />
