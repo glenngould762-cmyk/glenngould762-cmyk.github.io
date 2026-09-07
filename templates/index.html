@@ -3163,31 +3163,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     return data.result || data.Result || data.text || JSON.stringify(data);
                 }
 
+                // 辅助：http(s) 链接 → 完整 dataURL（dataURL 则原样返回）
+                async function toDataURL(src) {
+                  if (src.startsWith('data:')) return src;
+                  const res = await fetch(src);
+                  if (!res.ok) throw new Error(`图片下载失败: HTTP ${res.status}`);
+                  const blob = await res.blob();
+                  return await new Promise((resolve, reject) => {
+                    const fr = new FileReader();
+                    fr.onload = () => resolve(fr.result);
+                    fr.onerror = reject;
+                    fr.readAsDataURL(blob);
+                  });
+                }
+                
                 async function ocrSpace(imgBase64) {
                     const apikey = document.getElementById('ocr-apikey').value.trim() || 'helloworld';
-                    // OCR.space API supports base64
-                    const b64 = imgBase64.split(',')[1];
-                    const mime = imgBase64.match(/data:([^;]+);/);
-                    const mimeType = mime ? mime[1] : 'image/jpeg';
+                
+                    // 统一转成完整 dataURL（http 链接先下载，dataURL 原样返回）
+                    const dataUrl = await toDataURL(imgBase64);
+                
+                    // 发送前自检
+                    if (!/^data:image\/[a-z+]+;base64,/.test(dataUrl) || dataUrl.length < 500) {
+                        throw new Error('图片数据异常：' + dataUrl.slice(0, 60));
+                    }
+                
                     const body = new URLSearchParams({
-                        base64Image: 'data:' + mimeType + ';base64,' + b64,
-                        language: 'chs',  // Chinese simplified
+                        base64Image: dataUrl,          // 不 split、不拼前缀，整串发送
+                        language: 'chs',
                         isOverlayRequired: 'false',
                         apikey: apikey,
                         OCREngine: '2'
                     });
+                
                     const resp = await fetch('https://api.ocr.space/parse/image', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString(),
-                        signal: AbortSignal.timeout(20000)
+                        body,
+                        signal: AbortSignal.timeout(20000)   // 沿用旧版的超时保护
                     });
-                    if (!resp.ok) throw new Error('OCR.space 返回错误：HTTP ' + resp.status);
-                    const data = await resp.json();
-                    if (data.IsErroredOnProcessing) throw new Error(data.ErrorMessage || 'OCR.space处理失败');
+                
+                    const raw = await resp.text();
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${raw}`);
+                    const data = JSON.parse(raw);
+                    if (data.IsErroredOnProcessing) throw new Error(data.ErrorMessage?.[0] ?? raw);
+                
                     const parsed = data.ParsedResults;
                     if (!parsed || !parsed.length) throw new Error('未获取到识别结果');
-                    return parsed.map(p => p.ParsedText || '').join('\n').trim();
+                    return parsed.map(p => p.ParsedText || '').join('\n').trim();  // 沿用旧版的多结果合并
                 }
 
                 function parseOcrText(text) {
